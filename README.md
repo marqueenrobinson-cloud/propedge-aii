@@ -1,120 +1,98 @@
-# PropEdge AI — How to Put It Online (Plain-Step Guide)
+# PropEdge AI — Vercel Deployment Guide
 
-This guide gets your app from a folder on your computer to a real, working website
-that anyone can open. No coding needed — just clicking and copying.
-
-It takes about 10–15 minutes the first time. You'll do it once, and after that any
-change is automatic.
-
----
-
-## First, the one thing to understand
-
-Your app has two halves:
-
-- **The part you see** (the chat screen) — this is what shows up in a preview.
-- **The part that does the work** (the `/api` folder) — this is what actually talks
-  to Claude, GPT, and Gemini. It only runs on a real web host.
-
-That second half is why the preview showed a "Connection error." A preview can show
-the screen but can't run the worker. **Vercel runs both halves**, which is why we use it.
-
-You picked "bring your own key," so **you do NOT need to enter any API keys into
-Vercel.** Each person who uses the app pastes their own key once, right in the app.
+## Project Structure
+```
+propedge/
+├── api/
+│   ├── claude.js      ← Anthropic API route
+│   ├── openai.js      ← OpenAI API route
+│   └── gemini.js      ← Google Gemini API route
+├── src/
+│   ├── main.jsx       ← React entry point
+│   └── App.jsx        ← Main app with model switcher
+├── index.html
+├── package.json
+├── vite.config.js
+└── vercel.json
+```
 
 ---
 
-## What you need before you start
+## Step 1 — Get Your API Keys
 
-- The `propedge` folder (unzipped — not the .zip).
-- A free **GitHub** account → github.com
-- A free **Vercel** account → vercel.com (sign up using your GitHub account; it's easier)
-
----
-
-## Step 1 — Put your project on GitHub
-
-GitHub is where your code lives online. Vercel reads from it.
-
-The easiest way (no terminal, all clicks):
-
-1. Go to **github.com** and sign in.
-2. Click the **+** in the top-right corner → **New repository**.
-3. Name it `propedge-ai`. Leave everything else as-is. Click **Create repository**.
-4. On the next page, click the link that says **"uploading an existing file"**.
-5. Open your `propedge` folder on your computer, select everything inside it, and
-   drag it all into the browser window.
-   - Important: drag the *contents* (the `api` folder, `src` folder, `index.html`,
-     etc.) — not the outer `propedge` folder itself.
-6. Wait for the upload to finish, then click **Commit changes** (the green button).
-
-Done. Your code is now on GitHub.
+| Provider | URL | Free Tier |
+|---|---|---|
+| **Claude** | console.anthropic.com → API Keys | $5 free credits |
+| **GPT-4** | platform.openai.com → API Keys | $5 free credits |
+| **Gemini** | aistudio.google.com → Get API Key | Generous free tier |
 
 ---
 
-## Step 2 — Deploy on Vercel
+## Step 2 — Push to GitHub
 
-1. Go to **vercel.com** and sign in (use "Continue with GitHub").
-2. Click **Add New…** → **Project**.
-3. You'll see your `propedge-ai` repository in the list. Click **Import** next to it.
-4. Vercel will recognize it's a Vite app automatically. **Don't change any settings.**
-   - You can skip the "Environment Variables" section entirely — you don't need it.
-5. Click **Deploy**.
-6. Wait about a minute. When it finishes, you'll see a celebration screen with a
-   preview image. Click it (or the **Visit** button) to open your live app.
+1. Create a free account at **github.com**
+2. Create a new repository called `propedge-ai`
+3. In your terminal, inside the `propedge/` folder:
 
-Your app now has a real web address, something like:
-`https://propedge-ai.vercel.app`
-
-That link is yours to share, bookmark, or open on any phone or computer.
+```bash
+git init
+git add .
+git commit -m "Initial PropEdge AI"
+git remote add origin https://github.com/YOUR_USERNAME/propedge-ai.git
+git push -u origin main
+```
 
 ---
 
-## Step 3 — Use it
+## Step 3 — Deploy to Vercel
 
-1. Open your `vercel.app` link.
-2. Pick a model up top (Claude, GPT, or Gemini). A red dot means it needs a key.
-3. Paste your API key for that model when the bar appears, and hit save.
-4. Type a question to an agent and send. It should reply.
-
-Where to get keys (each has a free starting credit):
-
-| Model  | Get a key at                                  |
-|--------|-----------------------------------------------|
-| Claude | console.anthropic.com → API Keys              |
-| GPT    | platform.openai.com → API Keys                |
-| Gemini | aistudio.google.com → Get API Key             |
-
-Your key is saved in your own browser, so you only paste it once per device. The
-"change key" button up top lets you swap it later if needed.
+1. Go to **vercel.com** and sign up (free)
+2. Click **"Add New Project"**
+3. Import your `propedge-ai` GitHub repo
+4. Vercel auto-detects Vite — click **Deploy**
 
 ---
 
-## Making changes later
+## Step 4 — API Keys (Bring-Your-Own-Key)
 
-Any time you update a file on GitHub (or re-upload), Vercel automatically rebuilds
-and updates your live site within a minute. You never have to redeploy by hand.
+This app is set up so each user enters their own API key in the browser — it's saved
+locally on their device and used for their requests. **You do not need to add any
+environment variables in Vercel.** Just deploy and share the link; users paste their
+own key on first use (and can swap it with the "change key" button).
+
+Optional fallback: if you'd rather cover the cost for everyone, you *can* set these
+in Vercel (Settings → Environment Variables), and the app will use them when a user
+hasn't entered their own key. Most setups leave these blank.
+
+| Name | Value |
+|---|---|
+| `ANTHROPIC_API_KEY` | (optional) your Claude API key |
+| `OPENAI_API_KEY` | (optional) your OpenAI API key |
+| `GEMINI_API_KEY` | (optional) your Google Gemini API key |
 
 ---
 
-## If something goes wrong
+## Step 5 — Done! 🎉
 
-- **"Connection error / API endpoint isn't responding"** → You're looking at a
-  preview, not your `vercel.app` link. Open the real Vercel link.
-- **"API key was rejected"** → The key was typed wrong or has expired. Click
-  "change key" and paste a fresh one.
-- **The whole page is blank on Vercel** → Make sure in Step 1 you uploaded the
-  *contents* of the folder, so that `index.html` and the `api` folder sit at the top
-  level of the repository, not inside an extra `propedge` folder.
+Your app is live at: `https://propedge-ai.vercel.app`
+
+The app also lets users enter their own API keys in the browser (stored locally) — so you can share it without exposing yours.
 
 ---
 
-## Optional: testing on your own computer first
+## How the Model Switcher Works
 
-You do **not** need this to go live — it's only if you want to tinker locally.
+- Click **✦ Claude**, **◆ GPT-4o**, or **✸ Gemini** in the top bar
+- Each model maintains **separate conversation history** per agent
+- Red dot (●) means that model needs an API key
+- All API calls go through secure serverless functions — keys are never exposed in frontend code
 
-Plain `npm run dev` will NOT work fully, because it skips the `/api` worker (this is
-the same reason the preview failed). Instead:
+---
+
+## Local Development
+
+To run the full app (chat actually works) on your computer, use the Vercel CLI —
+it runs the frontend AND the `/api` serverless functions together:
 
 ```bash
 npm install
@@ -122,5 +100,9 @@ npm i -g vercel
 vercel dev
 ```
 
-`vercel dev` runs both halves together at http://localhost:3000, so the chat actually
-works locally.
+Then open the URL it prints (usually http://localhost:3000).
+
+Note: plain `npm run dev` only serves the frontend and skips the `/api` routes, so
+chat requests will fail with a connection error. Use `vercel dev` instead.
+
+For full plain-language deploy steps, see **DEPLOY.md**.
