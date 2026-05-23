@@ -111,8 +111,8 @@ const STYLES = `
     --muted: #6b6860;
     --gold: #c9a84c;
   }
-  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; height: 100vh; overflow: hidden; }
-  .app { display: flex; height: 100vh; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; height: 100vh; height: 100dvh; overflow: hidden; }
+  .app { display: flex; height: 100vh; height: 100dvh; }
 
   /* SIDEBAR */
   .sidebar { width: 188px; min-width: 188px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
@@ -254,6 +254,9 @@ const STYLES = `
     /* Keep the menu button always visible and let the title shrink/truncate
        instead of overflowing the row and pushing it off-screen. */
     .menu-btn { display: flex; }
+    /* Pin the top bar so the menu button always stays reachable, even if the
+       mobile keyboard or scrolling shifts the layout. */
+    .topbar { position: sticky; top: 0; z-index: 30; flex-shrink: 0; }
     .t-info { min-width: 0; overflow: hidden; }
     .t-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .t-tag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
