@@ -251,6 +251,13 @@ const STYLES = `
     .topbar { padding: 10px 14px; gap: 10px; }
     .t-icon { display: none; }
     .t-name { font-size: 15px; }
+    /* Keep the menu button always visible and let the title shrink/truncate
+       instead of overflowing the row and pushing it off-screen. */
+    .menu-btn { display: flex; }
+    .t-info { min-width: 0; overflow: hidden; }
+    .t-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .t-tag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .model-switcher { flex-shrink: 0; }
 
     /* let the model switcher wrap/scroll instead of overflowing */
     .model-switcher { gap: 3px; padding: 3px; }
