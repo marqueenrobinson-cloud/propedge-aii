@@ -18,9 +18,12 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
+        max_tokens: 1500,
         system,
         messages,
+        // Web search lets Claude pull real, current information and cite real
+        // links. max_uses caps searches per request to keep costs predictable.
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
       }),
     });
 
@@ -31,8 +34,33 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ error: msg, invalidKey: response.status === 401 });
     }
 
+    // The reply is the text blocks joined together.
     const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-    res.json({ reply: text });
+
+    // Pull out real source links. They appear in two places:
+    //  1) citations attached to text blocks (the pages Claude actually used)
+    //  2) web_search_tool_result blocks (everything the search returned)
+    // We dedupe by URL and prefer the cited ones.
+    const sources = [];
+    const seen = new Set();
+    const addSource = (url, title) => {
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      sources.push({ url, title: title || url });
+    };
+
+    for (const block of (data.content || [])) {
+      // Citations on text blocks
+      if (block.type === 'text' && Array.isArray(block.citations)) {
+        for (const c of block.citations) addSource(c.url, c.title);
+      }
+      // Raw search result blocks
+      if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
+        for (const r of block.content) addSource(r.url, r.title);
+      }
+    }
+
+    res.json({ reply: text, sources });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
