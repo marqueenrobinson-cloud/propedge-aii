@@ -177,6 +177,12 @@ const STYLES = `
   .msg.ai .bubble { background: var(--surface); border-bottom-left-radius: 3px; color: #d4cfc6; }
   .bubble strong { color: #fff; font-weight: 600; }
   .bubble pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 11px; font-family: 'DM Mono', monospace; font-size: 11.5px; overflow-x: auto; margin: 8px 0; line-height: 1.55; }
+  .sources { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .sources-label { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+  .source-link { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; text-decoration: none; transition: background 0.15s; margin-bottom: 2px; }
+  .source-link:hover { background: var(--surface2); }
+  .source-num { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--gold); color: var(--bg); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .source-title { font-size: 12px; color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .num { color: var(--gold); font-family: 'DM Mono', monospace; font-size: 13px; }
 
   .model-tag { display: inline-flex; align-items: center; gap: 4px; font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; margin-bottom: 6px; opacity: 0.7; }
@@ -481,7 +487,7 @@ export default function App() {
       const reply = data.reply || data.error || "No response received.";
       setChats(c => ({
         ...c,
-        [chatKey]: [...history, { role: "assistant", content: reply, error: isError, model: activeModel.id }],
+        [chatKey]: [...history, { role: "assistant", content: reply, error: isError, model: activeModel.id, sources: data.sources || [] }],
       }));
     } catch (err) {
       setChats(c => ({
@@ -612,6 +618,17 @@ export default function App() {
                           ? <span className="err">⚠ {m.content}</span>
                           : parseText(m.content)
                         }
+                        {!m.error && m.sources && m.sources.length > 0 && (
+                          <div className="sources">
+                            <div className="sources-label">Sources</div>
+                            {m.sources.map((s, si) => (
+                              <a key={si} href={s.url} target="_blank" rel="noopener noreferrer" className="source-link">
+                                <span className="source-num">{si + 1}</span>
+                                <span className="source-title">{s.title}</span>
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
