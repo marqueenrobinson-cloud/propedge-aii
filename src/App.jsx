@@ -409,6 +409,26 @@ export default function App() {
     } catch {}
   }, []);
 
+  // Load saved conversations from localStorage on startup, so chat history
+  // survives page reloads and returning later (per device).
+  const [chatsLoaded, setChatsLoaded] = useState(false);
+  useEffect(() => {
+    try {
+      const savedChats = JSON.parse(localStorage.getItem('propedge_chats') || '{}');
+      if (savedChats && typeof savedChats === 'object') setChats(savedChats);
+    } catch {}
+    setChatsLoaded(true);
+  }, []);
+
+  // Auto-save conversations whenever they change (only after the initial load,
+  // so we never overwrite saved history with the empty starting state).
+  useEffect(() => {
+    if (!chatsLoaded) return;
+    try {
+      localStorage.setItem('propedge_chats', JSON.stringify(chats));
+    } catch {}
+  }, [chats, chatsLoaded]);
+
   const saveKey = () => {
     if (!keyInput.trim()) return;
     const updated = { ...apiKeys, [activeModel.id]: keyInput.trim() };
