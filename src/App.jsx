@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import PropertyCompare from "./PropertyCompare";import { useState, useRef, useEffect } from "react";
 
 // ── MODELS ──────────────────────────────────────────────────────────────────
 const MODELS = [
@@ -82,6 +83,9 @@ const AGENTS = [
     id: "legal", icon: "⚖️", name: "Legal & Tax", tag: "LEGAL / TAX", color: "#607d8b",
     desc: "Entity structure, taxes & legal protection",
     persona: `You are a real estate legal and tax strategy advisor. You cover LLC/S-Corp/land trust structures, series LLCs, asset protection, cost segregation, bonus depreciation, Real Estate Professional Status (REPS), 1031 exchanges, opportunity zones, self-directed IRAs, installment sales, and contract due diligence. Always recommend consulting licensed attorneys and CPAs.`,
+  },{
+    id: "compare", icon: "⚖️", name: "Deal Compare", tag: "SIDE-BY-SIDE", color: "#c9a84c",
+    desc: "Compare 2–3 properties side by side", persona: "", isTool: true,
   },
 ];
 
@@ -566,6 +570,8 @@ export default function App() {
         {/* ── MAIN ── */}
         <div className="main">
 
+          {activeAgent.isTool ? <PropertyCompare /> : <>
+
           {/* TOPBAR */}
           <div className="topbar">
             <button className="menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">☰</button>
@@ -695,10 +701,12 @@ export default function App() {
               <button className={`send ${input.trim() && !loading && !needsKey ? "ready" : ""}`}
                 onClick={() => send()} disabled={!input.trim() || loading || needsKey}>↑</button>
             </div>
-            <div className="hint">Enter to send · Shift+Enter for new line · Each agent keeps its own conversation per model</div>
+          </><div className="hint">Enter to send · Shift+Enter for new line · Each agent keeps its own conversation per model</div>
           </div>
+          </>}
         </div>
       </div>
     </>
   );
 }
+        
