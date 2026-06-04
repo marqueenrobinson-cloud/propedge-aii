@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import PropertyCompare from "./PropertyCompare";import { useState, useRef, useEffect } from "react";
+import PropertyCompare from "./PropertyCompare";
 
 // ── MODELS ──────────────────────────────────────────────────────────────────
 const MODELS = [
