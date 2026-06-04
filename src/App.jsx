@@ -701,12 +701,8 @@ export default function App() {
               <button className={`send ${input.trim() && !loading && !needsKey ? "ready" : ""}`}
                 onClick={() => send()} disabled={!input.trim() || loading || needsKey}>↑</button>
             </div>
-          </><div className="hint">Enter to send · Shift+Enter for new line · Each agent keeps its own conversation per model</div>
+            <div className="hint">Enter to send · Shift+Enter for new line · Each agent keeps its own conversation per model</div>
           </div>
           </>}
         </div>
-      </div>
-    </>
-  );
-}
         
