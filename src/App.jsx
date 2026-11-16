@@ -24,7 +24,7 @@ const MODELS = [
   {
     id: "gemini",
     name: "Gemini",
-    label: "gemini-3.8-flash",
+    label: "gemini-3.5-flash-lite",
     icon: "✸",
     color: "#4285f4",
     endpoint: "/api/gemini",
@@ -588,6 +588,8 @@ export default function App() {
         [chatKey]: [...history, {
           role: "assistant", content: reply, error: isError || !data.reply, model: activeModel.id,
           sources: data.sources || [], truncated: !!data.truncated,
+          // Which exact model answered (Gemini can fall back to a second one).
+          label: data.model || "",
         }],
       }));
     } catch (err) {
@@ -754,7 +756,7 @@ export default function App() {
                       <div className="bubble">
                         {m.role === "assistant" && model && (
                           <div className="model-tag" style={{ background: `${model.color}15`, color: model.color, border: `1px solid ${model.color}30` }}>
-                            {model.icon} {model.label}
+                            {model.icon} {m.label || model.label}
                           </div>
                         )}
                         {m.error

@@ -1,0 +1,8 @@
+# Installed packages and build output (Vercel rebuilds these itself)
+node_modules/
+dist/
+
+# Local Vercel settings and secrets
+.vercel/
+.env
+.env.*
