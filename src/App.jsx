@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import PropertyCompare from "./PropertyCompare";
+import AICompare from "./AICompare";
 
 // ── MODELS ──────────────────────────────────────────────────────────────────
 const MODELS = [
@@ -86,6 +87,9 @@ const AGENTS = [
   },{
     id: "compare", icon: "🆚", name: "Deal Compare", tag: "SIDE-BY-SIDE", color: "#c9a84c",
     desc: "Compare 2–3 properties side by side", persona: "", isTool: true,
+  },{
+    id: "askall", icon: "🧠", name: "Ask All 3", tag: "CLAUDE · GPT · GEMINI", color: "#c9a84c",
+    desc: "One question, three AI answers side by side", persona: "", isTool: true,
   },
 ];
 
@@ -501,13 +505,14 @@ export default function App() {
   };
 
   // Forget the saved key for the active model so the user can paste a new one.
-  const changeKey = () => {
-    const updated = { ...apiKeys, [activeModel.id]: "" };
+  const forgetKey = (modelId) => {
+    const updated = { ...apiKeys, [modelId]: "" };
     setApiKeys(updated);
-    setKeySaved(k => ({ ...k, [activeModel.id]: false }));
+    setKeySaved(k => ({ ...k, [modelId]: false }));
     lsSet('propedge_keys', JSON.stringify(updated));
     setKeyInput("");
   };
+  const changeKey = () => forgetKey(activeModel.id);
 
   const needsKey = !keySaved[activeModel.id];
 
@@ -676,7 +681,15 @@ export default function App() {
               </div>
             </div>
             <div className="tool-scroll">
-              <PropertyCompare onAsk={askAnalyzer} />
+              {activeAgent.id === "askall"
+                ? <AICompare
+                    models={MODELS}
+                    agents={AGENTS.filter(a => !a.isTool)}
+                    apiKeys={apiKeys}
+                    renderText={parseText}
+                    onKeyRejected={forgetKey}
+                  />
+                : <PropertyCompare onAsk={askAnalyzer} />}
             </div>
           </> : <>
 
