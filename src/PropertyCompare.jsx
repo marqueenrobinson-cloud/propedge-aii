@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 /**
  * PropEdge AI — Property Comparison
@@ -40,6 +40,20 @@ const moneySigned = (n) =>
       })
 
 const pct = (n) => (isFinite(n) ? `${n.toFixed(1)}%` : '—')
+
+// Two decimals for the 1% rule. With one decimal, 0.95% showed as "1.0%" and
+// looked like a pass when it wasn't.
+const pct2 = (n) => (isFinite(n) ? `${n.toFixed(2)}%` : '—')
+
+// Remember what was typed, so leaving this screen doesn't erase it.
+const STORAGE_KEY = 'propedge_compare'
+const loadSaved = () => {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
+    if (s && Array.isArray(s.props) && s.props.length >= 2 && s.props.length <= 3) return s
+  } catch {}
+  return null
+}
 
 // ---- RENTAL analysis -----------------------------------------------------
 
@@ -143,7 +157,7 @@ const RENTAL_METRICS = [
   { key: 'annualCashFlow', label: 'Annual Cash Flow', fmt: moneySigned, higher: true, gold: true },
   { key: 'cashOnCash', label: 'Cash-on-Cash Return', fmt: pct, higher: true },
   { key: 'capRate', label: 'Cap Rate', fmt: pct, higher: true },
-  { key: 'onePctRule', label: '1% Rule', fmt: pct, higher: true, note: '≥ 1.0% is strong' },
+  { key: 'onePctRule', label: '1% Rule', fmt: pct2, higher: true, note: '≥ 1.00% is strong' },
   { key: 'grm', label: 'Gross Rent Multiplier', fmt: (n) => (n ? n.toFixed(1) : '—'), higher: false, note: 'lower is better' },
   { key: 'noi', label: 'Net Operating Income', fmt: money, higher: true, gold: true },
   { key: 'monthlyPI', label: 'Mortgage P&I /mo', fmt: money, higher: false, gold: true },
@@ -211,14 +225,38 @@ const blankProperty = (name) => ({
 
 // ---- component -----------------------------------------------------------
 
-export default function PropertyCompare() {
-  const [mode, setMode] = useState('rental')
-  const [props, setProps] = useState([
-    blankProperty('Property A'),
-    blankProperty('Property B'),
-  ])
+export default function PropertyCompare({ onAsk }) {
+  const [saved] = useState(loadSaved)
+  const [mode, setMode] = useState(saved && MODES[saved.mode] ? saved.mode : 'rental')
+  const [props, setProps] = useState(
+    saved
+      ? saved.props.map((p, i) => ({ ...blankProperty(`Property ${String.fromCharCode(65 + i)}`), ...p }))
+      : [blankProperty('Property A'), blankProperty('Property B')]
+  )
+
+  // Save on every change (quietly skip if the phone blocks storage).
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, props })) } catch {}
+  }, [mode, props])
 
   const cfg = MODES[mode]
+
+  const resetAll = () => setProps([blankProperty('Property A'), blankProperty('Property B')])
+
+  // Plain-English summary of the numbers, handed to the Deal Analyzer chat.
+  const buildSummary = () => {
+    const d = (v) => `$${num(v).toLocaleString('en-US')}`
+    const lines = props.filter((p) => cfg.requires.every((k) => p[k] !== '')).map((p) =>
+      mode === 'rental'
+        ? `${p.name}: price ${d(p.price)}, rent ${d(p.rent)}/mo, ${num(p.down)}% down at ${num(p.rate)}% for ${num(p.term) || 30} years, taxes ${d(p.taxes)}/yr, insurance ${d(p.insurance)}/yr, HOA ${d(p.hoa)}/mo, maintenance ${d(p.maintenance)}/mo, vacancy ${num(p.vacancy)}%, management ${num(p.mgmt)}%.`
+        : `${p.name}: purchase ${d(p.price)}, ARV ${d(p.arv)}, rehab ${d(p.rehab)}, buying costs ${d(p.buying)}, holding ${d(p.holding)}/mo for ${num(p.months) || 6} months, selling costs ${num(p.selling)}% of ARV` +
+          (p.financed ? `, financed with ${num(p.flipDown)}% down at ${num(p.flipRate)}% plus ${num(p.points)} points.` : ', paid in cash.')
+    )
+    return (
+      `Compare these ${mode === 'rental' ? 'rental' : 'fix-and-flip'} deals. Tell me which one is stronger and why, check my math, and flag anything I'm missing.\n\n` +
+      lines.join('\n')
+    )
+  }
 
   const update = (i, key, value) => {
     setProps((prev) => {
@@ -276,6 +314,15 @@ export default function PropertyCompare() {
     return tally.indexOf(max)
   }, [tally])
 
+  const anyData = props.some(hasData)
+
+  // The "best" deal can still be a bad deal. Say so instead of just crowning it.
+  const winnerLosesMoney =
+    overallWinner >= 0 &&
+    (mode === 'rental'
+      ? analyses[overallWinner].monthlyCashFlow < 0
+      : analyses[overallWinner].profit < 0)
+
   return (
     <div style={S.page}>
       <style>{KEYFRAMES}</style>
@@ -300,6 +347,9 @@ export default function PropertyCompare() {
             </button>
           ))}
         </div>
+        {anyData && (
+          <button style={S.resetBtn} onClick={resetAll}>clear all numbers</button>
+        )}
       </header>
 
       {/* INPUTS */}
@@ -440,8 +490,21 @@ export default function PropertyCompare() {
               {mode === 'flip'
                 ? ' Confirm ARV with real comps and pad the rehab budget — overruns kill flips.'
                 : ' Always confirm taxes, insurance, and rent comps before committing.'}
+              {winnerLosesMoney && (
+                <span style={S.warn}>
+                  {mode === 'rental'
+                    ? ' Heads up: even the leader has negative cash flow. It loses money every month at these numbers.'
+                    : ' Heads up: even the leader shows a loss at these numbers.'}
+                </span>
+              )}
             </span>
           </div>
+        )}
+
+        {onAsk && anyData && (
+          <button style={S.askBtn} onClick={() => onAsk(buildSummary())}>
+            Ask the Deal Analyzer about these numbers →
+          </button>
         )}
       </section>
     </div>
@@ -457,11 +520,24 @@ const KEYFRAMES = `
 
 const S = {
   page: {
-    background: '#0e0e0c', color: '#ece9e0', minHeight: '100vh',
-    padding: '32px 20px 80px',
-    fontFamily: "'Geist', -apple-system, system-ui, sans-serif",
-    animation: 'pcFade 0.4s ease both', maxWidth: 1100, margin: '0 auto',
+    // No minHeight:100vh and an explicit width: the old values made this page
+    // wider than a phone screen and impossible to scroll.
+    background: '#0e0e0c', color: '#ece9e0',
+    padding: '24px 16px 80px', boxSizing: 'border-box',
+    fontFamily: "'DM Sans', -apple-system, system-ui, sans-serif",
+    animation: 'pcFade 0.4s ease both', width: '100%', maxWidth: 1100, margin: '0 auto',
   },
+  resetBtn: {
+    display: 'block', marginTop: 12, background: 'transparent', border: 'none',
+    color: '#7a7a6e', cursor: 'pointer', padding: '4px 0', fontSize: 12,
+    fontFamily: "'DM Mono', monospace", textDecoration: 'underline',
+  },
+  askBtn: {
+    display: 'block', width: '100%', marginTop: 16, background: '#d8b46a', color: '#0e0e0c',
+    border: 'none', borderRadius: 10, padding: '14px 18px', cursor: 'pointer',
+    fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans', system-ui, sans-serif",
+  },
+  warn: { color: '#d88a8a' },
   header: { marginBottom: 28 },
   kicker: {
     fontFamily: "'DM Mono', monospace", fontSize: 12, letterSpacing: '0.18em',
@@ -508,7 +584,9 @@ const S = {
   affixR: { position: 'absolute', right: 10, color: '#7a7a6e', fontSize: 12 },
   input: {
     width: '100%', background: '#0e0e0c', border: '1px solid #2c2c20', borderRadius: 8,
-    color: '#ece9e0', padding: '8px 10px', fontSize: 14, fontFamily: "'DM Mono', monospace", outline: 'none',
+    // 16px on purpose: anything smaller makes iPhones zoom the page on tap.
+    color: '#ece9e0', padding: '8px 10px', fontSize: 16, fontFamily: "'DM Mono', monospace", outline: 'none',
+    boxSizing: 'border-box',
   },
   addCard: {
     background: 'transparent', border: '1px dashed #3a3a2c', borderRadius: 14, color: '#9a978c',
