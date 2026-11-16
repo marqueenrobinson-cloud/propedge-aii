@@ -6,7 +6,7 @@ const MODELS = [
   {
     id: "claude",
     name: "Claude",
-    label: "claude-sonnet-4",
+    label: "claude-sonnet-4.6",
     icon: "✦",
     color: "#c9a84c",
     endpoint: "/api/claude",
@@ -24,7 +24,7 @@ const MODELS = [
   {
     id: "gemini",
     name: "Gemini",
-    label: "gemini-1.5-pro",
+    label: "gemini-3.8-flash",
     icon: "✸",
     color: "#4285f4",
     endpoint: "/api/gemini",
@@ -84,7 +84,7 @@ const AGENTS = [
     desc: "Entity structure, taxes & legal protection",
     persona: `You are a real estate legal and tax strategy advisor. You cover LLC/S-Corp/land trust structures, series LLCs, asset protection, cost segregation, bonus depreciation, Real Estate Professional Status (REPS), 1031 exchanges, opportunity zones, self-directed IRAs, installment sales, and contract due diligence. Always recommend consulting licensed attorneys and CPAs.`,
   },{
-    id: "compare", icon: "⚖️", name: "Deal Compare", tag: "SIDE-BY-SIDE", color: "#c9a84c",
+    id: "compare", icon: "🆚", name: "Deal Compare", tag: "SIDE-BY-SIDE", color: "#c9a84c",
     desc: "Compare 2–3 properties side by side", persona: "", isTool: true,
   },
 ];
@@ -137,7 +137,9 @@ const STYLES = `
   .clear-btn:hover { color: #ef4444; border-color: #ef444440; }
 
   /* MAIN */
-  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+  /* Scroll area for tools like Deal Compare (without this the page could not scroll) */
+  .tool-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
 
   /* TOPBAR */
   .topbar { padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 14px; }
@@ -211,6 +213,12 @@ const STYLES = `
 
   .err { color: #ef4444; font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 0; }
 
+  /* MESSAGE ACTIONS (copy / try again) + cut-off note */
+  .msg-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .msg-action { background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.5px; padding: 5px 10px; cursor: pointer; transition: all 0.15s; }
+  .msg-action:hover { color: var(--gold); border-color: #c9a84c40; }
+  .cutoff-note { margin-top: 10px; font-family: 'DM Mono', monospace; font-size: 10.5px; color: var(--gold); opacity: 0.85; }
+
   /* MARKDOWN BLOCKS */
   .md-p { margin-bottom: 2px; }
   .md-gap { height: 8px; }
@@ -276,6 +284,9 @@ const STYLES = `
     .msg, .msg.user { max-width: 100%; }
     .bubble { max-width: calc(100% - 44px); font-size: 14px; }
     .input-zone { padding: 12px 14px 16px; }
+    /* 16px stops iPhones from zooming the whole page in when you tap a text box */
+    .input-field, .key-input { font-size: 16px; }
+    .msg-action { padding: 8px 12px; font-size: 11px; }
     .key-banner { margin: 8px 14px; flex-wrap: wrap; }
     .hint { font-size: 9px; }
   }
@@ -286,7 +297,9 @@ const STYLES = `
 // highlighting. Order matters — code is pulled out first so its contents are not
 // re-parsed, then bold-italic before bold before italic.
 function renderInline(str, keyPrefix) {
-  const tokens = str.split(/(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|(?<!\*)\*(?!\s)[^*]+\*|\$[\d,]+\.?\d*[KMBkmb%]?|\b\d+\.?\d*%)/g);
+  // No "lookbehind" in this pattern on purpose: older iPhones (iOS before 16.4)
+  // can't read it and would show a blank white page instead of the app.
+  const tokens = str.split(/(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*(?!\s)[^*]+\*|\$[\d,]+\.?\d*[KMBkmb%]?|\b\d+\.?\d*%)/g);
   return tokens.filter(Boolean).map((p, j) => {
     const key = `${keyPrefix}-${j}`;
     if (p.startsWith('`') && p.endsWith('`')) return <code key={key} className="inline-code">{p.slice(1, -1)}</code>;
@@ -384,13 +397,43 @@ function parseText(text) {
   return blocks;
 }
 
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+// Saving can fail (private browsing, storage full). Never let that crash the app.
+const lsSet = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
+
+const MAX_MESSAGES_SENT = 24;   // how much history goes to the AI each time
+const MAX_MESSAGES_SAVED = 80;  // how much history is kept per chat on the device
+
+// Build the conversation we send to the AI:
+//  • leave out error bubbles and the question that caused them
+//  • merge back-to-back messages from the same side (some AIs reject those)
+//  • only send the most recent part so long chats don't get slow and pricey
+function buildPayload(history) {
+  const clean = [];
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i];
+    if (m.error) continue;
+    if (m.role === "user" && history[i + 1]?.error) continue;
+    const last = clean[clean.length - 1];
+    if (last && last.role === m.role) last.content += "\n\n" + m.content;
+    else clean.push({ role: m.role, content: m.content });
+  }
+  const recent = clean.slice(-MAX_MESSAGES_SENT);
+  while (recent.length && recent[0].role !== "user") recent.shift();
+  return recent;
+}
+
 // ── APP ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const [activeAgent, setActiveAgent] = useState(AGENTS[0]);
   const [activeModel, setActiveModel] = useState(MODELS[0]);
   const [chats, setChats] = useState({});
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  // Which chat is waiting on a reply (null = none). Tracking the chat, not just
+  // true/false, keeps the "typing" dots from showing up in the wrong conversation.
+  const [loadingKey, setLoadingKey] = useState(null);
+  const loading = loadingKey !== null;
+  const [copiedIdx, setCopiedIdx] = useState(null);
   const [apiKeys, setApiKeys] = useState({ claude: "", gpt4: "", gemini: "" });
   const [keyInput, setKeyInput] = useState("");
   const [keySaved, setKeySaved] = useState({ claude: false, gpt4: false, gemini: false });
@@ -398,9 +441,20 @@ export default function App() {
   const endRef = useRef(null);
   const taRef = useRef(null);
 
-  const messages = chats[`${activeAgent.id}:${activeModel.id}`] || [];
+  const currentKey = `${activeAgent.id}:${activeModel.id}`;
+  const messages = chats[currentKey] || [];
+  const waitingHere = loadingKey === currentKey;
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+  // Keep the text box the right height, including when text is dropped in
+  // from Deal Compare.
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 130) + "px";
+  }, [input, activeAgent]);
 
   // Load saved keys from localStorage
   useEffect(() => {
@@ -428,9 +482,13 @@ export default function App() {
   // so we never overwrite saved history with the empty starting state).
   useEffect(() => {
     if (!chatsLoaded) return;
-    try {
-      localStorage.setItem('propedge_chats', JSON.stringify(chats));
-    } catch {}
+    // Only keep the most recent messages per chat. Phone storage is small, and
+    // once it fills up nothing new would save at all.
+    const trimmed = {};
+    for (const [k, list] of Object.entries(chats)) {
+      if (Array.isArray(list) && list.length) trimmed[k] = list.slice(-MAX_MESSAGES_SAVED);
+    }
+    lsSet('propedge_chats', JSON.stringify(trimmed));
   }, [chats, chatsLoaded]);
 
   const saveKey = () => {
@@ -438,7 +496,7 @@ export default function App() {
     const updated = { ...apiKeys, [activeModel.id]: keyInput.trim() };
     setApiKeys(updated);
     setKeySaved(k => ({ ...k, [activeModel.id]: true }));
-    localStorage.setItem('propedge_keys', JSON.stringify(updated));
+    lsSet('propedge_keys', JSON.stringify(updated));
     setKeyInput("");
   };
 
@@ -447,23 +505,24 @@ export default function App() {
     const updated = { ...apiKeys, [activeModel.id]: "" };
     setApiKeys(updated);
     setKeySaved(k => ({ ...k, [activeModel.id]: false }));
-    localStorage.setItem('propedge_keys', JSON.stringify(updated));
+    lsSet('propedge_keys', JSON.stringify(updated));
     setKeyInput("");
   };
 
   const needsKey = !keySaved[activeModel.id];
 
-  const send = async (text) => {
-    const msg = text || input.trim();
+  // text = what to send (defaults to the text box). base = the conversation to
+  // add it to (defaults to the current one; "try again" passes a shorter one).
+  const send = async (text, base) => {
+    const msg = (text || input).trim();
     if (!msg || loading) return;
     if (needsKey) return;
     setInput("");
-    if (taRef.current) taRef.current.style.height = "auto";
 
-    const chatKey = `${activeAgent.id}:${activeModel.id}`;
-    const history = [...messages, { role: "user", content: msg }];
+    const chatKey = currentKey;
+    const history = [...(base || messages), { role: "user", content: msg }];
     setChats(c => ({ ...c, [chatKey]: history }));
-    setLoading(true);
+    setLoadingKey(chatKey);
 
     try {
       const res = await fetch(activeModel.endpoint, {
@@ -473,7 +532,7 @@ export default function App() {
           "x-api-key": apiKeys[activeModel.id] || "",
         },
         body: JSON.stringify({
-          messages: history.map(m => ({ role: m.role, content: m.content })),
+          messages: buildPayload(history),
           system: activeAgent.persona,
         }),
       });
@@ -488,14 +547,19 @@ export default function App() {
         data = JSON.parse(raw);
       } catch {
         const looksLikeHtml = raw.trim().startsWith("<");
-        const message = looksLikeHtml
+        // 502/504 means the server ran out of time (usually a long web search),
+        // which is a different problem from the API not being deployed.
+        const timedOut = res.status === 504 || res.status === 502 || res.status === 408;
+        const message = timedOut
+          ? "That one took too long and timed out. Tap \"try again\", or ask a shorter, more specific question."
+          : looksLikeHtml
           ? "The API endpoint isn't responding. The /api routes only run when the app is deployed (e.g. on Vercel) — they can't run in a static preview or plain dev server. Deploy the project, then try again."
           : `Unexpected response from the server: ${raw.slice(0, 120)}`;
         setChats(c => ({
           ...c,
           [chatKey]: [...history, { role: "assistant", content: message, error: true, model: activeModel.id }],
         }));
-        setLoading(false);
+        setLoadingKey(null);
         return;
       }
 
@@ -514,14 +578,17 @@ export default function App() {
             model: activeModel.id,
           }],
         }));
-        setLoading(false);
+        setLoadingKey(null);
         return;
       }
 
       const reply = data.reply || data.error || "No response received.";
       setChats(c => ({
         ...c,
-        [chatKey]: [...history, { role: "assistant", content: reply, error: isError, model: activeModel.id, sources: data.sources || [] }],
+        [chatKey]: [...history, {
+          role: "assistant", content: reply, error: isError || !data.reply, model: activeModel.id,
+          sources: data.sources || [], truncated: !!data.truncated,
+        }],
       }));
     } catch (err) {
       setChats(c => ({
@@ -530,12 +597,38 @@ export default function App() {
       }));
     }
 
-    setLoading(false);
+    setLoadingKey(null);
   };
 
   const onKey = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
 
-  const clearChat = () => setChats(c => ({ ...c, [`${activeAgent.id}:${activeModel.id}`]: [] }));
+  const clearChat = () => setChats(c => ({ ...c, [currentKey]: [] }));
+
+  // "Try again" on an error: drop the failed question + error bubble, resend it.
+  const retry = () => {
+    const last = messages[messages.length - 1];
+    const prev = messages[messages.length - 2];
+    if (!last?.error || prev?.role !== "user") return;
+    send(prev.content, messages.slice(0, -2));
+  };
+
+  // Copy a reply so it can be pasted into a text, email, or notes.
+  const copyReply = async (text, idx) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 1500);
+    } catch {}
+  };
+
+  // Deal Compare → Deal Analyzer: jump to the analyzer with the numbers
+  // already typed in the box, ready to send.
+  const askAnalyzer = (text) => {
+    const analyzer = AGENTS.find(a => a.id === "analyzer");
+    if (!analyzer) return;
+    setActiveAgent(analyzer);
+    setInput(text);
+  };
 
   return (
     <>
@@ -570,7 +663,20 @@ export default function App() {
         {/* ── MAIN ── */}
         <div className="main">
 
-          {activeAgent.isTool ? <PropertyCompare /> : <>
+          {activeAgent.isTool ? <>
+            {/* Tools get the same top bar so the menu button never disappears. */}
+            <div className="topbar">
+              <button className="menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">☰</button>
+              <div className="t-icon">{activeAgent.icon}</div>
+              <div className="t-info">
+                <div className="t-name" style={{ color: activeAgent.color }}>{activeAgent.name}</div>
+                <div className="t-tag">{activeAgent.tag} · PROPEDGE AI</div>
+              </div>
+            </div>
+            <div className="tool-scroll">
+              <PropertyCompare onAsk={askAnalyzer} />
+            </div>
+          </> : <>
 
           {/* TOPBAR */}
           <div className="topbar">
@@ -639,6 +745,7 @@ export default function App() {
               <>
                 {messages.map((m, i) => {
                   const model = MODELS.find(x => x.id === m.model);
+                  const isLast = i === messages.length - 1;
                   return (
                     <div key={i} className={`msg ${m.role === "user" ? "user" : "ai"}`}>
                       <div className="avatar" style={m.role === "assistant" ? { borderColor: `${activeAgent.color}40` } : {}}>
@@ -665,11 +772,26 @@ export default function App() {
                             ))}
                           </div>
                         )}
+                        {!m.error && m.truncated && (
+                          <div className="cutoff-note">This reply hit the length limit. Send "continue" to get the rest.</div>
+                        )}
+                        {m.role === "assistant" && !m.error && (
+                          <div className="msg-actions">
+                            <button className="msg-action" onClick={() => copyReply(m.content, i)}>
+                              {copiedIdx === i ? "✓ copied" : "copy"}
+                            </button>
+                          </div>
+                        )}
+                        {m.error && isLast && !loading && !needsKey && messages[i - 1]?.role === "user" && (
+                          <div className="msg-actions">
+                            <button className="msg-action" onClick={retry}>↻ try again</button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
-                {loading && (
+                {waitingHere && (
                   <div className="msg ai">
                     <div className="avatar" style={{ borderColor: `${activeAgent.color}40` }}>{activeAgent.icon}</div>
                     <div className="bubble">
@@ -696,8 +818,7 @@ export default function App() {
                 placeholder={needsKey ? `Add ${activeModel.name} API key to start...` : `Ask ${activeAgent.name} via ${activeModel.name}...`}
                 value={input} disabled={needsKey}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={onKey} rows={1}
-                onInput={e => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 130) + "px"; }} />
+                onKeyDown={onKey} rows={1} />
               <button className={`send ${input.trim() && !loading && !needsKey ? "ready" : ""}`}
                 onClick={() => send()} disabled={!input.trim() || loading || needsKey}>↑</button>
             </div>
